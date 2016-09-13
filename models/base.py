@@ -1,4 +1,3 @@
-import os
 import lasagne
 import theano
 import theano.tensor as T
@@ -78,6 +77,7 @@ class Base(object):
 
         out1 = InputLayer((None, 6) + tuple(img_shape),
                           name='decide network1 input')
+        #out1 = MaxPool2DLayer(out1, pool_size=)
         out1 = Conv2DLayer(out1,
                            num_filters=1,
                            filter_size=(1, 1),
@@ -94,6 +94,7 @@ class Base(object):
                            nonlinearity=sigmoid,
                            filter_size=(1, 1),
                            name='decide network2 output')
+        #out2 = MaxPool2DLayer(out2, pool_size=)
 
         out3 = InputLayer((None, 24, img_shape[0] / 4, img_shape[1] / 4),
                            name='decide network3 input')
@@ -105,6 +106,7 @@ class Base(object):
                            nonlinearity=sigmoid,
                            filter_size=(1, 1),
                            name='decide network3 output')
+        #out3 = MaxPool2DLayer(out3, pool_size=)
 
         return [l3, out1, out2, out3]
 
