@@ -6,8 +6,6 @@ node_modules
 *~
 *.swp
 
-
-
 env.sh
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -74,3 +72,5 @@ debian/reproducible-experiment-platform
 debian/files
 *.substvars
 *.debhelper.log
+
+data/
