@@ -1,3 +1,4 @@
+import os
 import lasagne
 import theano
 import theano.tensor as T
@@ -18,61 +19,82 @@ class CascadeBase(object):
                  learning_rate=1e-3,
                  c=1.0,
                  c_complexity=1e-3,
-                 c_sub_objs=[1e-3]):
+                 c_sub_objs=[1e-3],
+                 c_sub_obj_cs=[1e-3],
+                 mul=True,
+                 pool_sizes=[2, 2, 5],
+                 num_filters=[1, 1, 3],
+                 filter_sizes=[1, 3, 3]
+                ):
+        self.img_shape = img_shape
+        self.pool_sizes = pool_sizes
+        
         self.c_sub_objs = c_sub_objs
+        self.c_sub_obj_cs = c_sub_obj_cs
         self.c_complexity = c_complexity
         self.c = c
         
         self.input_X = T.tensor4('inputs')
         self.targets = T.tensor4('targets')
         
-        self.output_layers = self.build_network(img_shape)
+        assert(len(pool_sizes) == len(num_filters))
+        self.num_cascades = len(pool_sizes) - 1
         
-        assert(len(self.output_layers) - 1 == len(self.c_sub_objs))
+        self.output_layer, self.downscaled_activation_layers, self.branches = self.build_network(num_filters, filter_sizes)
         
-        self.output = self.build_output()
+        assert(len(self.decide_layers) == len(self.c_sub_objs))
+        assert(len(self.decide_layers) == len(self.c_sub_obj_cs))
+        self.output = self.build_output(mul)
         self.train = self.compile_trainer(learning_rate)
         self.evaluate = self.compile_evaluator()
         self.predict = self.compile_forward_pass()
         
-    def build_output(self):
-        answers = 1
-
-        for output_layer in self.output_layers:
-            answers *= lasagne.layers.get_output(output_layer, self.input_X)
+    def build_output(self, mul=True):
+        if mul:
+            ai_layer = MaxPool2DLayer(self.downscaled_activation_layers[-1], pool_size=self.pool_sizes[-1])
+            answers = lasagne.layers.get_output(ai_layer, ai_next)
+        else:
+            answers = 1
             
-        return answers
+        return answers * lasagne.layers.get_output(self.output_layer, self.input_X), downscaled_activation_layers
     
     def compute_loss(self, a, t, c):
         return -(t * T.log(a) + c * (1.0 - t) * T.log(1.0 - a)).mean()
-        
-    # TODO: here we can change the value of self.c with individual value for every cascade
+
     def get_sub_loss(self):
         sub_obj = 0
         
-        for i, output_layer in enumerate(self.output_layers[1:]):
+        target_transform_input_layer = InputLayer(self.img_shape, self.targets, name='target transform input layer')
+        
+        for i, output_layer in enumerate(self.downscaled_activation_layers):
             sub_answer = lasagne.layers.get_output(output_layer, self.input_X)
+            
+            downsample_target_layer = MaxPool2DLayer(target_transform_input_layer, pool_size=self.pool_sizes[i])
+            targets = lasagne.layers.get_output(downsample_target_layer, self.targets)
+            
             sub_obj += self.compute_loss(sub_answer.ravel(),
-                                         self.targets.ravel(),
-                                         self.c) * self.c_sub_objs[i]
+                                         targets.ravel(),
+                                         self.c_sub_obj_cs[i]) * self.c_sub_objs[i]
             
         return sub_obj
     
     def get_complexity(self):
         complexity = 0
         cumprod = 1
+        max_complexity = 0
         
         for output_layer in self.output_layers[1:]:
             cumprod *= lasagne.layers.get_output(output_layer, self.input_X)
             complexity += (cumprod * (1 - self.targets)).sum()
+            max_complexity += (1 - self.targets).sum()
             
-        return complexity
+        return complexity * self.c_complexity / max_complexity
     
     def get_loss(self):
         return self.compute_loss(self.output.ravel(), self.targets.ravel(), self.c)
     
     def get_obj(self):                    
-        return self.get_loss() + self.get_sub_loss() + self.get_complexity()
+        return self.get_loss() + self.get_sub_loss() + self.c_complexity * self.get_complexity()
     
     def get_precision(self):   
         a = self.output.ravel()
@@ -92,47 +114,64 @@ class CascadeBase(object):
         
         return lasagne.objectives.binary_accuracy(a, t).mean()
 
-    # TODO: could be modified
-    def build_network(self, img_shape, pool_sizes=[5, 4], depths=[1, 3]):
-        input_layer = InputLayer((None, 1) + tuple(img_shape),
-                                 self.input_X,
-                                 name='network input')
+    def build_network(self, num_filters, filter_sizes):
+        net = InputLayer((None, 1) + tuple(self.img_shape),
+                         self.input_X,
+                         name='network input')
 
-        conv0 = Conv2DLayer(input_layer,
-                         nonlinearity=elu,
-                         num_filters=depths[0],
-                         filter_size=3,
-                         pad='same',
-                         name='l1 conv')
-        mp01 = MaxPool2DLayer(conv0, pool_size=pool_sizes[0], name='l01 max_pool')
-        conv1 = Conv2DLayer(mp01,
-                            nonlinearity=elu,
-                            num_filters=depths[1],
-                            filter_size=3,
-                            pad='same',
-                            name='l1 conv')
-        mp12 = MaxPool2DLayer(conv1, pool_size=pool_sizes[1], name='l12 max_pool')
-        out = Conv2DLayer(mp12,
+        # Build network
+        for i in range(self.num_cascades + 1):
+            net = Conv2DLayer(net,
+                              nonlinearity=elu,
+                              num_filters=num_filters[i],
+                              filter_size=filter_sizes[i],
+                              pad='same',
+                              name='conv {}'.format(i + 1))
+            net = MaxPool2DLayer(net,
+                                 pool_size=self.pool_sizes[i],
+                                 name='Max Pool {} {}'.format(i + 1, i + 2))
+
+        
+        out = Conv2DLayer(net,
                           nonlinearity=sigmoid,
                           num_filters=1,
                           filter_size=1,
                           pad='same',
                           name='prediction layer')
+        
+        branches = [None] * self.num_cascades
+        
+        layers = lasagne.layers.get_all_layers(out)
+        
+        # Build branches
+        for i in range(self.num_cascades):
+            branches[i] = Conv2DLayer(layers[(i + 1) * 2],
+                                      num_filters=1,
+                                      filter_size=1,
+                                      nonlinearity=sigmoid,
+                                      name='decide network {} output'.format(i + 1))
+        
+        # TODO(Aelphy): use here new layer in order to perform automatic graph image building
+        downscaled_activation_layers = []
+        ai_next = lasagne.layers.get_output(branches[0], self.input_X)
 
-        out1 = MaxPool2DLayer(mp01, pool_size=pool_sizes[1])
-        out1 = Conv2DLayer(out1,
-                           num_filters=1,
-                           filter_size=1,
-                           nonlinearity=sigmoid,
-                           name='decide network1 output')
+        for i in range(self.num_cascades - 1):
+            downscaled_activation_layers.append(InputLayer(ai_next.shape, ai_next))
+            ai_layer = MaxPool2DLayer(downscaled_activation_layers[-1], pool_size=self.pool_sizes[i + 1])
+            ai = lasagne.layers.get_output(ai_layer, ai_next)
+            ai_next = ai * lasagne.layers.get_output(branches[i + 1], self.input_X)
 
-        return [out, out1]
+        downscaled_activation_layers.append(InputLayer(ai_next.shape, ai_next))
+        
+        return out, downscaled_activation_layers, branches
 
     def compile_forward_pass(self):
         return theano.function([self.input_X], self.output)
 
     def compile_evaluator(self):        
-        return theano.function([self.input_X, self.targets], [self.get_recall(),
+        return theano.function([self.input_X, self.targets], [self.get_obj(),
+                                                              self.get_recall(),
+                                                              self.get_precision(),
                                                               self.get_accuracy(),
                                                               self.get_loss(),
                                                               self.get_sub_loss(),
@@ -142,9 +181,10 @@ class CascadeBase(object):
     def compile_trainer(self, learning_rate):
         obj = self.get_obj()
 
-        params = []
-        for layer in self.output_layers:
-            params += lasagne.layers.get_all_params(layer, trainable=True)
+        params = lasagne.layers.get_all_params(layer, trainable=True)
+
+        for branch in self.branches:
+            params += lasagne.layers.get_all_params(branch, trainable=True)
 
         updates = lasagne.updates.adamax(obj,
                                          params,
@@ -152,9 +192,20 @@ class CascadeBase(object):
         return theano.function([self.input_X, self.targets], 
                                [obj,
                                 self.get_recall(),
+                                self.get_precision(),
                                 self.get_accuracy(),
                                 self.get_loss(),
                                 self.get_sub_loss(),
                                 self.get_complexity()
                                ],
                                updates=updates)
+    
+    def save(self, path, name):
+        for i, output_layer in enumerate(self.output_layers):
+            np.savez(os.path.join(path, name + str(i)), *lasagne.layers.get_all_param_values(output_layer))
+    
+    def load(self, path, name):
+        for j, output_layer in enumerate(self.output_layers):
+            with np.load(os.path.join(path, name + str(j) + '.npz')) as f:
+                param_values = [f['arr_%d' % i] for i in range(len(f.files))]
+                lasagne.layers.set_all_param_values(output_layer, param_values)
