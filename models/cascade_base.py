@@ -48,10 +48,9 @@ class CascadeBase(object):
         self.output = self.build_output(mul)
         self.target_pool_layers = self.build_target_pool_layers()
         
-        self.train = self.compile_trainer(learning_rate)
+        self.train = self.compile_trainer(mul, learning_rate)
         self.evaluate = self.compile_evaluator()
         self.predict = self.compile_forward_pass()
-        self.estimate_complexity = self.compile_complexity_estimator()
         
     def build_output(self, mul=True):
         if mul:
@@ -114,7 +113,7 @@ class CascadeBase(object):
             
         return result / max_result
     
-    def compile_complexity_estimator(self):
+    def get_complexity_parts(self):
         complexity, max_complexity, miltipliers, constants = self.compute_complexity()
         
         result = []
@@ -124,7 +123,7 @@ class CascadeBase(object):
             
         result[0] = T.constant(result[0])
         
-        return theano.function([self.input_X, self.targets], result)
+        return result
     
     def get_loss(self):
         a = self.output.ravel()
@@ -207,32 +206,39 @@ class CascadeBase(object):
         return theano.function([self.input_X], self.output)
 
     def compile_evaluator(self):        
-        return theano.function([self.input_X, self.targets], [self.get_obj(),
-                                                              self.get_recall(),
-                                                              self.get_precision(),
-                                                              self.get_accuracy(),
-                                                              self.get_loss(),
-                                                              self.get_sub_loss(),
-                                                              self.get_total_complexity()
-                                                             ])
+        return theano.function([self.input_X, self.targets], {
+                                                              'obj' : self.get_obj(),
+                                                              'recall' : self.get_recall(),
+                                                              'precision' : self.get_precision(),
+                                                              'accuracy' : self.get_accuracy(),
+                                                              'loss' : self.get_loss(),
+                                                              'sub_loss' : self.get_sub_loss(),
+                                                              'total_complexity' : self.get_total_complexity(),
+                                                              'complexity_parts' : T.stack(self.get_complexity_parts())
+                                                             })
     
-    def compile_trainer(self, learning_rate):
+    def compile_trainer(self, mul, learning_rate):
         obj = self.get_obj()
 
-        params = lasagne.layers.get_all_params(self.masked_output_layer, trainable=True)
+        if mul:
+            params = lasagne.layers.get_all_params(self.masked_output_layer, trainable=True)
+        else:
+            params = lasagne.layers.get_all_params(self.output_layer, trainable=True)
         
         updates = lasagne.updates.adamax(obj,
                                          params,
                                          learning_rate=learning_rate)
         return theano.function([self.input_X, self.targets], 
-                               [obj,
-                                self.get_recall(),
-                                self.get_precision(),
-                                self.get_accuracy(),
-                                self.get_loss(),
-                                self.get_sub_loss(),
-                                self.get_total_complexity()
-                               ],
+                               {
+                                'obj' : self.get_obj(),
+                                'recall' : self.get_recall(),
+                                'precision' : self.get_precision(),
+                                'accuracy' : self.get_accuracy(),
+                                'loss' : self.get_loss(),
+                                'sub_loss' : self.get_sub_loss(),
+                                'total_complexity' : self.get_total_complexity(),
+                                'complexity_parts' : T.stack(self.get_complexity_parts())
+                               },
                                updates=updates)
     
     def save(self, path, name):
