@@ -49,7 +49,7 @@ class Visualizer():
         for watch in watches:            
             if watch == 'total_complexity':
                 self.lines3[watch], = ax3.plot(np.arange(num_epochs), self.template_space, label='Train ' + watch)
-                self.lines4[watch], = ax4.plot(np.arange(num_epochs), self.template_space, label='Train ' + watch)
+                self.lines4[watch], = ax4.plot(np.arange(num_epochs), self.template_space, label='Val ' + watch)
             elif watch == 'complexity_parts':
                 self.lines3[watch] = [None] * len(metrics_template[watch])
                 self.lines4[watch] = [None] * len(metrics_template[watch])
@@ -60,10 +60,10 @@ class Visualizer():
                                                       label='Train ' + watch + str(j + 1))
                     self.lines4[watch][j], = ax4.plot(np.arange(num_epochs),
                                                       self.template_space,
-                                                      label='Train ' + watch + str(j + 1))
+                                                      label='Val ' + watch + str(j + 1))
             else:
                 self.lines1[watch], = ax1.plot(np.arange(num_epochs), self.template_space, label='Train ' + watch)
-                self.lines2[watch], = ax2.plot(np.arange(num_epochs), self.template_space, label='Train ' + watch)
+                self.lines2[watch], = ax2.plot(np.arange(num_epochs), self.template_space, label='Val ' + watch)
     
         ax1.legend(loc='best')
         ax2.legend(loc='best')

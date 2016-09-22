@@ -7,9 +7,7 @@ from lasagne.layers import Conv2DLayer,\
                            MaxPool2DLayer,\
                            InputLayer
 from lasagne.nonlinearities import elu, sigmoid, rectify
-
 from utils.maxpool_multiply import MaxPoolMultiplyLayer
-
 
 class CascadeBase(object):
     def __init__(self,
@@ -40,23 +38,25 @@ class CascadeBase(object):
         assert(len(pool_sizes) == len(num_filters))
         self.num_cascades = len(pool_sizes) - 1
         
-        self.output_layer, self.downsampled_activation_layers, self.masked_output_layer = self.build_network()
+        self.out, self.downsampled_activation_layers, self.masked_output_layer = self.build_network()
+        
+        if mul:
+            self.output_layer = self.masked_output_layer
+        else:
+            self.output_layer = self.out
 
         assert(len(self.downsampled_activation_layers) == len(self.c_sub_obj_cs))
         assert(len(self.downsampled_activation_layers) == len(self.c_sub_objs))
         
-        self.output = self.build_output(mul)
+        self.output = self.build_output()
         self.target_pool_layers = self.build_target_pool_layers()
         
-        self.train = self.compile_trainer(mul, learning_rate)
+        self.train = self.compile_trainer(learning_rate)
         self.evaluate = self.compile_evaluator()
         self.predict = self.compile_forward_pass()
         
-    def build_output(self, mul=True):
-        if mul:
-            return lasagne.layers.get_output(self.masked_output_layer, self.input_X)
-        else:
-            return lasagne.layers.get_output(self.output_layer, self.input_X)
+    def build_output(self):
+        return lasagne.layers.get_output(self.output_layer, self.input_X)
     
     def compute_loss(self, a, t, c):
         return -(t * T.log(a) + c * (1.0 - t) * T.log(1.0 - a)).mean()
@@ -217,13 +217,10 @@ class CascadeBase(object):
                                                               'complexity_parts' : T.stack(self.get_complexity_parts())
                                                              })
     
-    def compile_trainer(self, mul, learning_rate):
+    def compile_trainer(self, learning_rate):
         obj = self.get_obj()
 
-        if mul:
-            params = lasagne.layers.get_all_params(self.masked_output_layer, trainable=True)
-        else:
-            params = lasagne.layers.get_all_params(self.output_layer, trainable=True)
+        params = lasagne.layers.get_all_params(self.output_layer, trainable=True)
         
         updates = lasagne.updates.adamax(obj,
                                          params,
@@ -242,7 +239,7 @@ class CascadeBase(object):
                                updates=updates)
     
     def save(self, path, name):
-        np.savez(os.path.join(path, name + str(i + 1)), *lasagne.layers.get_all_param_values(self.masked_output_layer))
+        np.savez(os.path.join(path, name), *lasagne.layers.get_all_param_values(self.masked_output_layer))
     
     def load(self, path, name):
         with np.load(os.path.join(path, name + '.npz')) as f:
