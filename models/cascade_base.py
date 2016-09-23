@@ -20,7 +20,8 @@ class CascadeBase(object):
                  mul=True,
                  pool_sizes=[2, 2, 5],
                  num_filters=[1, 1, 3],
-                 filter_sizes=[1, 3, 3]
+                 filter_sizes=[1, 3, 3],
+                 optimizer=lasagne.updates.adamax
                 ):
         self.img_shape = img_shape
         self.pool_sizes = pool_sizes
@@ -51,7 +52,7 @@ class CascadeBase(object):
         self.output = self.build_output()
         self.target_pool_layers = self.build_target_pool_layers()
         
-        self.train = self.compile_trainer(learning_rate)
+        self.train = self.compile_trainer(learning_rate, optimizer)
         self.evaluate = self.compile_evaluator()
         self.predict = self.compile_forward_pass()
         
@@ -59,7 +60,7 @@ class CascadeBase(object):
         return lasagne.layers.get_output(self.output_layer, self.input_X)
     
     def compute_loss(self, a, t, c):
-        return -(t * T.log(a) + c * (1.0 - t) * T.log(1.0 - a)).mean()
+        return -(t * T.log(a + 1e-6) + c * (1.0 - t) * T.log(1.0 - a + 1e-6)).mean()
     
     def build_target_pool_layers(self):
         result = []
@@ -217,14 +218,14 @@ class CascadeBase(object):
                                                               'complexity_parts' : T.stack(self.get_complexity_parts())
                                                              })
     
-    def compile_trainer(self, learning_rate):
+    def compile_trainer(self, learning_rate, optimizer):
         obj = self.get_obj()
 
         params = lasagne.layers.get_all_params(self.output_layer, trainable=True)
         
-        updates = lasagne.updates.adamax(obj,
-                                         params,
-                                         learning_rate=learning_rate)
+        updates = optimizer(obj,
+                            params,
+                            learning_rate=learning_rate)
         return theano.function([self.input_X, self.targets], 
                                {
                                 'obj' : self.get_obj(),
