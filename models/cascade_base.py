@@ -7,6 +7,7 @@ from lasagne.layers import Conv2DLayer,\
                            MaxPool2DLayer,\
                            InputLayer
 from lasagne.nonlinearities import elu, sigmoid, rectify
+from lasagne.regularization import l2, regularize_layer_params
 from utils.maxpool_multiply import MaxPoolMultiplyLayer
 
 class CascadeBase(object):
@@ -21,12 +22,14 @@ class CascadeBase(object):
                  pool_sizes=[2, 2, 5],
                  num_filters=[1, 1, 3],
                  filter_sizes=[1, 3, 3],
-                 optimizer=lasagne.updates.adamax
+                 optimizer=lasagne.updates.adamax,
+                 l2_c=0
                 ):
         self.img_shape = img_shape
         self.pool_sizes = pool_sizes
         self.num_filters = num_filters
         self.filter_sizes = filter_sizes
+        self.l2_c = l2_c
         
         self.c_sub_objs = c_sub_objs
         self.c_sub_obj_cs = c_sub_obj_cs
@@ -133,7 +136,15 @@ class CascadeBase(object):
         return self.compute_loss(a, t, self.c)
     
     def get_obj(self):
-        return self.get_loss() + self.get_sub_loss() + self.c_complexity * self.get_total_complexity()
+        l2_penalty = 0
+        
+        for layer in lasagne.layers.get_all_layers(self.output_layer):
+            l2_penalty += regularize_layer_params(layer, l2)
+        
+        return self.get_loss() +\
+               self.get_sub_loss() +\
+               self.c_complexity * self.get_total_complexity() +\
+               self.l2_c * l2_penalty
     
     def get_precision(self):   
         a = self.output.ravel()
