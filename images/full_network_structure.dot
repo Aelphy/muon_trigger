@@ -1,0 +1,50 @@
+digraph Network {
+<InputLayer1> [shape=record, style=filled, fillcolor="#B3F1A0", label="InputLayer\nOutput shape: (num_samples, 1, 512, 512)"];
+<Conv2DLayer1> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 1, 512, 512)"];
+<MaxPool2DLayer1> [shape=record, style=filled, fillcolor="#FCAC41", label="MaxPool2DLayer\nOutput shape: (num_samples, 1, 256, 256)"];
+<Conv2DLayer2> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 1, 256, 256)"];
+<MaxPool2DLayer2> [shape=record, style=filled, fillcolor="#FCAC41", label="MaxPool2DLayer\nOutput shape: (num_samples, 1, 128, 128)"];
+<Conv2DLayer3> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 3, 128, 128)"];
+<MaxPool2DLayer3> [shape=record, style=filled, fillcolor="#FCAC41", label="MaxPool2DLayer\nOutput shape: (num_samples, 3, 64, 64)"];
+<Conv2DLayer4> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 3, 64, 64)"];
+<MaxPool2DLayer4> [shape=record, style=filled, fillcolor="#FCAC41", label="MaxPool2DLayer\nOutput shape: (num_samples, 3, 32, 32)"];
+<Conv2DLayer5> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 6, 32, 32)"];
+
+<MaxPoolMultiplyLayer1> [shape=record, style=filled, fillcolor="#91E875", label=" MaxPoolMultiplyLayer\nOutput shape: (num_samples, 1, 256, 256)"]
+<MaxPoolMultiplyLayer2> [shape=record, style=filled, fillcolor="#91E875", label=" MaxPoolMultiplyLayer\nOutput shape: (num_samples, 1, 128, 128)"];
+<MaxPoolMultiplyLayer3> [shape=record, style=filled, fillcolor="#91E875", label=" MaxPoolMultiplyLayer\nOutput shape: (num_samples, 1, 64, 64)"];
+<MaxPoolMultiplyLayer4> [shape=record, style=filled, fillcolor="#91E875", label=" MaxPoolMultiplyLayer\nOutput shape: (num_samples, 1, 32, 32)"];
+
+<Conv2DLayer6> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 1, 256, 256)"];
+<Conv2DLayer7> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 1, 128, 128)"];
+<Conv2DLayer8> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 1, 64, 64)"];
+<Conv2DLayer9> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 1, 32, 32)"];
+<Conv2DLayer10> [shape=record, style=filled, fillcolor="#3173A2", label="Conv2DLayer\nOutput shape: (num_samples, 1, 512, 512)"];
+
+
+rankdir=LR
+
+<InputLayer1> -> <Conv2DLayer1>;
+<Conv2DLayer1> -> <MaxPool2DLayer1> -> <Conv2DLayer2> -> <MaxPool2DLayer2> -> <Conv2DLayer3> -> <MaxPool2DLayer3> -> <Conv2DLayer4>;
+<Conv2DLayer4> -> <MaxPool2DLayer4>;
+<MaxPool2DLayer4> -> <Conv2DLayer5>;
+
+<Conv2DLayer1> -> <Conv2DLayer10>;
+
+<Conv2DLayer10> -> <MaxPoolMultiplyLayer1>;
+<Conv2DLayer6> -> <MaxPoolMultiplyLayer1>;
+
+<Conv2DLayer7> -> <MaxPoolMultiplyLayer2>;
+<MaxPoolMultiplyLayer1> -> <MaxPoolMultiplyLayer2>;
+
+<Conv2DLayer8> -> <MaxPoolMultiplyLayer3>;
+<MaxPoolMultiplyLayer2> -> <MaxPoolMultiplyLayer3>;
+
+<Conv2DLayer9> -> <MaxPoolMultiplyLayer4>;
+<MaxPoolMultiplyLayer3> -> <MaxPoolMultiplyLayer4>;
+
+<Conv2DLayer2> -> <Conv2DLayer6>;
+<Conv2DLayer3> -> <Conv2DLayer7>;
+<Conv2DLayer4> -> <Conv2DLayer8>;
+<Conv2DLayer5> -> <Conv2DLayer9>;
+}

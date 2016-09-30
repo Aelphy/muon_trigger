@@ -40,7 +40,7 @@ class CascadeBase(object):
         self.targets = T.tensor4('targets')
         
         assert(len(pool_sizes) == len(num_filters))
-        self.num_cascades = len(pool_sizes) - 1
+        self.num_cascades = len(pool_sizes)
         
         self.out, self.downsampled_activation_layers, self.masked_output_layer = self.build_network()
         
@@ -70,8 +70,8 @@ class CascadeBase(object):
         input_layer = InputLayer((None, 1) + tuple(self.img_shape),
                                  self.targets,
                                  name='target transform input layer')
-        for i, activation_layer in enumerate(self.downsampled_activation_layers):
-            result.append(MaxPool2DLayer(input_layer, pool_size=np.prod(self.pool_sizes[:i + 1])))
+        for i in range(len(self.downsampled_activation_layers)):
+            result.append(MaxPool2DLayer(input_layer, pool_size=int(np.prod(self.pool_sizes[:i]))))
             
         result.append(MaxPool2DLayer(input_layer, pool_size=np.prod(self.pool_sizes)))
             
@@ -96,7 +96,8 @@ class CascadeBase(object):
         miltipliers = []
         constants = []
         
-        for i, activation_layer in enumerate(self.downsampled_activation_layers):
+        for i in range(len(self.downsampled_activation_layers) - 1):
+            activation_layer = self.downsampled_activation_layers[i]
             targets = lasagne.layers.get_output(self.target_pool_layers[i], self.targets)
             
             constants.append(np.prod(np.array(self.img_shape) / np.prod(self.pool_sizes[:i + 1])))
@@ -170,7 +171,7 @@ class CascadeBase(object):
                          name='network input')
 
         # Build network
-        for i in range(self.num_cascades + 1):
+        for i in range(self.num_cascades):
             net = Conv2DLayer(net,
                               nonlinearity=elu,
                               num_filters=self.num_filters[i],
@@ -192,10 +193,10 @@ class CascadeBase(object):
         branches = [None] * self.num_cascades
         
         layers = lasagne.layers.get_all_layers(out)
-        
+
         # Build branches
         for i in range(self.num_cascades):
-            branches[i] = Conv2DLayer(layers[(i + 1) * 2],
+            branches[i] = Conv2DLayer(layers[i * 2 + 1],
                                       num_filters=1,
                                       filter_size=1,
                                       nonlinearity=sigmoid,
@@ -205,9 +206,8 @@ class CascadeBase(object):
 
         for i in range(self.num_cascades - 1):
             downsampled_activation_layers.append(MaxPoolMultiplyLayer(branches[i + 1],
-                                                                      branches[i],
+                                                                      downsampled_activation_layers[-1],
                                                                       self.pool_sizes[i + 1]))
-            
         masked_out = MaxPoolMultiplyLayer(out,
                                           downsampled_activation_layers[-1],
                                           self.pool_sizes[-1])
