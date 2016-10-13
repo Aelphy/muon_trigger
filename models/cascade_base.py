@@ -169,6 +169,8 @@ class CascadeBase(object):
         net = InputLayer((None, 1) + tuple(self.img_shape),
                          self.input_X,
                          name='network input')
+        
+        convs = []
 
         # Build network
         for i in range(self.num_cascades):
@@ -178,6 +180,7 @@ class CascadeBase(object):
                               filter_size=self.filter_sizes[i],
                               pad='same',
                               name='conv {}'.format(i + 1))
+            convs.append(net)
             net = MaxPool2DLayer(net,
                                  pool_size=self.pool_sizes[i],
                                  name='Max Pool {} {}'.format(i + 1, i + 2))
@@ -191,12 +194,10 @@ class CascadeBase(object):
                           name='prediction layer')
         
         branches = [None] * self.num_cascades
-        
-        layers = lasagne.layers.get_all_layers(out)
 
         # Build branches
         for i in range(self.num_cascades):
-            branches[i] = Conv2DLayer(layers[i * 2 + 1],
+            branches[i] = Conv2DLayer(convs[i],
                                       num_filters=1,
                                       filter_size=1,
                                       nonlinearity=sigmoid,
@@ -207,7 +208,7 @@ class CascadeBase(object):
         for i in range(self.num_cascades - 1):
             downsampled_activation_layers.append(MaxPoolMultiplyLayer(branches[i + 1],
                                                                       downsampled_activation_layers[-1],
-                                                                      self.pool_sizes[i + 1]))
+                                                                      self.pool_sizes[i]))
         masked_out = MaxPoolMultiplyLayer(out,
                                           downsampled_activation_layers[-1],
                                           self.pool_sizes[-1])
