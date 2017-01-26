@@ -238,6 +238,7 @@ class CascadeBase(object):
         updates = optimizer(obj,
                             params,
                             learning_rate=learning_rate)
+            
         return theano.function([self.input_X, self.targets], 
                                {
                                 'obj' : self.get_obj(),
